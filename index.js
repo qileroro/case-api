@@ -110,19 +110,36 @@ function loadConfig(config) {
 }
 
 function wrapHandler(handler, schema) {
-  return async (req, res) => {
-    req.data = await getJson(req, {schema: schema});
-    res.setHeader('Content-Type', 'application/json');
-    return JSON.stringify(await handler(req, res));
+  return (req, res) => {
+    return new Promise((resolve, reject) => {
+      getJson(req, {schema: schema}).then(function(reqData){
+        req.data = reqData;
+        res.setHeader('Content-Type', 'application/json');
+        handler(req, res).then(function(handleResult) {
+          var result = JSON.stringify(handleResult);
+          resolve(result);
+        }).catch(function(e){
+          console.log(e);
+          reject(e);
+        });
+      }).catch(function(e){
+        reject(e);
+      });
+    });
   };
 }
 
 function wrapErrorHandler(handler) {
-  return async (err, req, res) => {
-    req.data = await getJson(req);
-
-    res.setHeader('Content-Type', 'application/json');
-    return JSON.stringify(await handler(err, req, res));
+  return (err, req, res) => {
+    return new Promise((resolve, reject) => {
+      try { res.setHeader('Content-Type', 'application/json'); } catch {}
+      handler(err, req, res).then(function(handleResult) {
+        var result = JSON.stringify(handleResult);
+        resolve(result);
+      }).catch(function(e){
+        reject(e);
+      });
+    });
   };
 }
 
