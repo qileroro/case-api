@@ -11,13 +11,14 @@ const DefaultConfigFile = './config';
 const DefaultSqlFile = './database.sql';
 const DefaultPort = 3000;
 
-function App(config=DefaultConfigFile) {
+function App(config) {
+  config = config || path.join(process.cwd(), DefaultConfigFile);
   var fileConfig = config.constructor == String;
   this.config = fileConfig ? require(config) : config;
   this.router = new Router();
   this.db = config.database ? mysql.createPool(config.database) : null;
   this.redis = config.redis ? new Redis(config.redis) : null;
-  this.patterns = config.patterns ? require('require-yml')(config.patterns) : null;
+  this.patterns = config.patterns ? require('require-yml')(path.join(process.cwd(), config.patterns)) : null;
 
   this.get = this.get.bind(this);
   this.post = this.post.bind(this);
