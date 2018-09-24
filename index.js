@@ -13,9 +13,7 @@ const DefaultSqlFile = './database.sql';
 const DefaultPort = 3000;
 
 function App(config) {
-  config = config || path.join(process.cwd(), DefaultConfigFile);
-  var fileConfig = config.constructor == String;
-  this.config = fileConfig ? require(config) : config;
+  this.config = config = loadConfig(config);
   this.router = new Router();
   this.db = config.database ? mysql.createPool(config.database) : null;
   this.redis = config.redis ? new Redis(config.redis) : null;
@@ -90,6 +88,22 @@ App.prototype = {
     handler = wrapHandler(handler, schema);
     for (var method of methods) {
       this.router[method](path, handler);
+    }
+  }
+}
+
+function loadConfig(config) {
+  if (config) {
+    if (config.constructor == String) {
+      return require(path.join(process.cwd(), config)) || {};
+    } else {
+      return config;
+    }
+  } else {
+    try {
+      return require(path.join(process.cwd(), DefaultConfigFile)) || {};
+    } catch {
+      return {};
     }
   }
 }
