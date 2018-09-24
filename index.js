@@ -15,9 +15,10 @@ const DefaultPort = 3000;
 function App(config) {
   this.config = config = loadConfig(config);
   this.router = new Router();
-  this.db = config.database ? mysql.createPool(config.database) : null;
-  this.redis = config.redis ? new Redis(config.redis) : null;
-  this.patterns = config.patterns ? require('require-yml')(path.join(process.cwd(), config.patterns)) : null;
+  var keys = Object.keys(config);
+  this.db = keys.indexOf('database') !== -1 ? mysql.createPool(config.database) : null;
+  this.redis = keys.indexOf('redis') !== -1 ? new Redis(config.redis) : null;
+  this.patterns = keys.indexOf('patterns') !== -1 ? require('require-yml')(path.join(process.cwd(), config.patterns)) : null;
 
   this.get = this.get.bind(this);
   this.post = this.post.bind(this);
