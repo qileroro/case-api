@@ -1,0 +1,23 @@
+{
+  "name": "case-api",
+  "version": "0.2.0",
+  "description": "",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qileroro/case-api"
+  },
+  "keywords": [],
+  "author": "Kevin Wang <qileroro@qq.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/qileroro/case-api/issues"
+  },
+  "homepage": "https://github.com/qileroro/case-api",
+  "dependencies": {
+    "mysql2": "^1.6.1",
+    "ioredis": "^4.0.0",
+    "line-router": "^0.8.1",
+    "req-parser": "^0.2.4"
+  }
+}
