@@ -2,8 +2,8 @@ const App = require('./index');
 const app = new App();
 const {get, post, redis, error} = app;
 
-error(async (err, req, res) => {
-  console.log(err);
+error(async (req, res) => {
+  console.log(req.error);
   return 'the error is throw';
 });
 

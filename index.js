@@ -3,17 +3,18 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const createError = require('http-errors');
 const mysql = require('mysql2/promise');
 const Redis = require('ioredis');
 const Router = require('line-router');
 const getJson = require('req-parser');
-
 const crud = require('crud-sql');
-const createError = require('http-errors');
+const strengthan = require('strong-handler');
 
 const DefaultConfigFile = './config';
 const DefaultSqlFile = './database.sql';
 const DefaultPort = 3000;
+const DefaultTimeout = 30000;
 
 function App(config) {
   this.config = config = loadConfig(config);
@@ -22,6 +23,8 @@ function App(config) {
   this.db = keys.indexOf('database') !== -1 ? mysql.createPool(config.database) : null;
   this.redis = keys.indexOf('redis') !== -1 ? new Redis(config.redis) : null;
   this.patterns = keys.indexOf('patterns') !== -1 ? require('require-yml')(path.join(process.cwd(), config.patterns)) : null;
+  this.notfoundHandler = this.wrapHandler(defaultNotFoundHandler);
+  this.errorHandler = this.wrapHandler(defaultErrorHandler);
 
   this.get = this.get.bind(this);
   this.post = this.post.bind(this);
@@ -44,7 +47,7 @@ App.prototype = {
     }
   },
   runServer() {
-    http.createServer(this.router.handler).listen(this.config.port || DefaultPort);
+    http.createServer(this.handler.bind(this)).listen(this.config.port || DefaultPort);
   },
   setupDatabase() {
     (async () => {
@@ -62,6 +65,19 @@ App.prototype = {
       console.log(e.stack);
       process.exit();
     })
+  },
+  handler(req, res) {
+    var matchResult = this.router.matchRoute(req.method, req.url);
+    var {handler, params} = matchResult || {handler: this.notfoundHandler};
+    req.params = params;
+
+    handler(req, res).catch((err) => {
+      req.error = err;
+      this.errorHandler(req, res).catch((err) => {
+        try {res.statusCode=500} catch {}
+        res.end('Server Error');
+      });
+    });
   },
   get(path, schema, handler) {
     this.registerApi(['get'], path, schema, handler);
@@ -82,17 +98,27 @@ App.prototype = {
     this.registerApi(['get', 'post', 'put', 'delete'], path, schema, handler);
   },
   notfound(handler) {
-    this.router.notfound(wrapHandler(handler));
+    this.notfoundHandler = this.wrapHandler(handler);
   },
   error(handler) {
-    this.router.error(wrapErrorHandler(handler));
+    this.errorHandler = this.wrapHandler(handler);
   },
   registerApi(methods, path, schema, handler) {
     [schema, handler] = handler ? [schema, handler] : [null, schema];
-    handler = wrapHandler(handler, schema);
+    handler = this.wrapHandler(handler, schema);
     for (var method of methods) {
       this.router[method](path, handler);
     }
+  },
+  wrapHandler(handler, schema) {
+    return strengthan(async (req, res) => {
+      var reqData = await getJson(req, {schema: schema});
+      req.data = {...reqData, ...req.params};
+      res.setHeader('Content-Type', 'application/json');
+      var handleResult = await handler(req, res);
+      var result = JSON.stringify(handleResult);
+      return result;
+    }, this.config.handlerTimeout || DefaultTimeout);
   },
   crud(path, patterns) {
     var {queryPattern, createPattern, updatePattern, deletePattern, 
@@ -169,45 +195,22 @@ function loadConfig(config) {
   }
 }
 
-function wrapHandler(handler, schema) {
-  return (req, res) => {
-    return new Promise((resolve, reject) => {
-      getJson(req, {schema: schema}).then(function(reqData){
-        req.data = {...reqData, ...req.params};
-        res.setHeader('Content-Type', 'application/json');
-        handler(req, res).then(function(handleResult) {
-          var result = JSON.stringify(handleResult);
-          resolve(result);
-        }).catch(function(e){
-          console.log(e);
-          reject(e);
-        });
-      }).catch(function(e){
-        reject(e);
-      });
-    });
-  };
-}
-
-function wrapErrorHandler(handler) {
-  return (err, req, res) => {
-    return new Promise((resolve, reject) => {
-      try { res.setHeader('Content-Type', 'application/json'); } catch {}
-      handler(err, req, res).then(function(handleResult) {
-        var result = JSON.stringify(handleResult);
-        resolve(result);
-      }).catch(function(e){
-        reject(e);
-      });
-    });
-  };
-}
-
 function makePagination(current, per_page, total) {
   var previous = current === 1 ? null : current - 1;
   var pages = Math.ceil(total / per_page);
   var next = current === pages ? null : current + 1;
   return {previous, next, current, per_page, total, pages};
+}
+
+function defaultNotFoundHandler(req, res) {
+  res.statusCode = 404;
+  res.end('Not Found');
+}
+
+function defaultErrorHandler(err, req, res) {
+  var {statusCode=500} = err;
+  res.statusCode = statusCode;
+  res.end('Server Error');
 }
 
 module.exports = App;
