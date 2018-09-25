@@ -24,7 +24,7 @@ function App(config) {
   this.redis = keys.indexOf('redis') !== -1 ? new Redis(config.redis) : null;
   this.patterns = keys.indexOf('patterns') !== -1 ? require('require-yml')(path.join(process.cwd(), config.patterns)) : null;
   this.notfoundHandler = this.wrapHandler(defaultNotFoundHandler);
-  this.errorHandler = this.wrapHandler(defaultErrorHandler);
+  this.errorHandler = this.wrapErrorHandler(defaultErrorHandler);
 
   this.get = this.get.bind(this);
   this.post = this.post.bind(this);
@@ -101,7 +101,7 @@ App.prototype = {
     this.notfoundHandler = this.wrapHandler(handler);
   },
   error(handler) {
-    this.errorHandler = this.wrapHandler(handler);
+    this.errorHandler = this.wrapErrorHandler(handler);
   },
   registerApi(methods, path, schema, handler) {
     [schema, handler] = handler ? [schema, handler] : [null, schema];
@@ -115,6 +115,13 @@ App.prototype = {
       var reqData = await getJson(req, {schema: schema});
       req.data = {...reqData, ...req.params};
       res.setHeader('Content-Type', 'application/json');
+      var handleResult = await handler(req, res);
+      var result = JSON.stringify(handleResult);
+      return result;
+    }, this.config.handlerTimeout || DefaultTimeout);
+  },
+  wrapErrorHandler(handler) {
+    return strengthan(async (req, res) => {
       var handleResult = await handler(req, res);
       var result = JSON.stringify(handleResult);
       return result;
