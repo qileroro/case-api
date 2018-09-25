@@ -214,10 +214,14 @@ function defaultNotFoundHandler(req, res) {
   res.end('Not Found');
 }
 
-function defaultErrorHandler(err, req, res) {
-  var {statusCode=500} = err;
-  res.statusCode = statusCode;
-  res.end('Server Error');
+function defaultErrorHandler(req, res) {
+  if (req.error && req.error.statusCode) {
+    res.statusCode = req.error.statusCode;
+    return {message: req.error.message};
+  } else {
+    res.statusCode = 500;
+    return {message: 'Server Error'};
+  }
 }
 
 module.exports = App;
