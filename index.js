@@ -8,6 +8,9 @@ const Redis = require('ioredis');
 const Router = require('line-router');
 const getJson = require('req-parser');
 
+const crud = require('crud-sql');
+const createError = require('http-errors');
+
 const DefaultConfigFile = './config';
 const DefaultSqlFile = './database.sql';
 const DefaultPort = 3000;
@@ -90,6 +93,63 @@ App.prototype = {
     for (var method of methods) {
       this.router[method](path, handler);
     }
+  },
+  crud(path, patterns) {
+    var {queryPattern, createPattern, updatePattern, deletePattern, 
+         createSchema, updateSchema, deleteSchema} = patterns;
+    this.patternQuery(path, queryPattern);
+    this.patternCreate(path, createSchema, createPattern);
+    this.patternUpdate("post", `${path}/<id:number>`, updateSchema, updatePattern);
+    this.patternDelete(`${path}/<id:number>`, deletePattern);
+
+    this.get(path, App.crud.query(queryPattern));
+    this.post(path, createSchema, App.crud.create(createPattern));
+    this.put(`${path}/<id:number>`, updateSchema, App.crud.update(updatePattern));
+    this.delete(`${path}/<id:number>`, deleteSchema, App.crud.delete(deletePattern));
+  },
+  patternQuery(path, queryPattern) {
+    var handler = async (req, res) => {
+      var {sql, countSql, values} = crud.selectSql(queryPattern, req.data);
+      var [data] = await this.db.query(sql, values);
+      var [[{count}]] = await this.db.query(countSql, values);
+      var per_page = Number(req.data.per_page || queryPattern.limit || data.length);
+      var current = Number(req.data.page || 1);
+      var pagination = makePagination(current, per_page, count);
+      return {pagination, data};
+    };
+    this.get(path, handler.bind(this));
+  },
+  patternCreate(path, createSchema, createPattern) {
+    var handler = async (req, res) => {
+      var {sql, values} = crud.insertSql(createPattern, req.data);
+      var [{insertId}] = await this.db.execute(sql, values);
+      var [[row]] = await this.db.query(`SELECT * FROM ${pattern.table} WHERE id=?`, [insertId]);
+      return row;
+    };
+    this.post(path, createSchema, handler.bind(this));
+  },
+  patternUpdate(method, path, updateSchema, updatePattern) {
+    var handler = async (req, res) => {
+      var {sql, values} = crud.updateSql(pattern, req.data);
+      var [{affectedRows}] = await this.db.execute(sql, values);
+      if (affectedRows === 0) {
+        throw createError(404);
+      }
+      var [[row]] = await this.db.query(`SELECT * FROM ${pattern.table} WHERE id=?`, [req.data.id]);
+      return row;
+    };
+    this.registerApi([method], path, updateSchema, handler.bind(this));
+  },
+  patternDelete(path, deletePattern) {
+    var handler = async (req, res) => {
+      var {sql, values} = crud.deleteSql(pattern, req.data);
+      var [{affectedRows}] = await this.db.execute(sql, values);
+      if (affectedRows === 0) {
+        throw createError(404);
+      }
+      return {};
+    };
+    this.delete(path, handler.bind(this));
   }
 }
 
@@ -113,7 +173,7 @@ function wrapHandler(handler, schema) {
   return (req, res) => {
     return new Promise((resolve, reject) => {
       getJson(req, {schema: schema}).then(function(reqData){
-        req.data = reqData;
+        req.data = {...reqData, ...req.params};
         res.setHeader('Content-Type', 'application/json');
         handler(req, res).then(function(handleResult) {
           var result = JSON.stringify(handleResult);
@@ -141,6 +201,13 @@ function wrapErrorHandler(handler) {
       });
     });
   };
+}
+
+function makePagination(current, per_page, total) {
+  var previous = current === 1 ? null : current - 1;
+  var pages = Math.ceil(total / per_page);
+  var next = current === pages ? null : current + 1;
+  return {previous, next, current, per_page, total, pages};
 }
 
 module.exports = App;
