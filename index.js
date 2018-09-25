@@ -134,11 +134,6 @@ App.prototype = {
     this.patternCreate(path, createSchema, createPattern);
     this.patternUpdate("post", `${path}/<id:number>`, updateSchema, updatePattern);
     this.patternDelete(`${path}/<id:number>`, deletePattern);
-
-    this.get(path, App.crud.query(queryPattern));
-    this.post(path, createSchema, App.crud.create(createPattern));
-    this.put(`${path}/<id:number>`, updateSchema, App.crud.update(updatePattern));
-    this.delete(`${path}/<id:number>`, deleteSchema, App.crud.delete(deletePattern));
   },
   patternQuery(path, queryPattern) {
     var handler = async (req, res) => {
