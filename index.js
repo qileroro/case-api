@@ -53,11 +53,12 @@ App.prototype = {
     (async () => {
       var fn = this.config.sql || DefaultSqlFile;
       var sql = fs.readFileSync(fn, {encoding: 'utf-8'});
+      sql = sql.replace(new RegExp("/\\*[^\v]+?\\*/", "g"), '');
       var lines = sql.split(';').filter((line) => line.trim());
       for (var line of lines) {
-        await db.execute(line);
+        await this.db.execute(line);
       }
-      db.end();
+      this.db.end();
     })().then(function(){
       console.log("All done!")
       process.exit();
